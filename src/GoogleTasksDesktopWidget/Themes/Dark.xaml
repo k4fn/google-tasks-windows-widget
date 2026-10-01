@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Opaque Google Tasks style dark surfaces. -->
+  <SolidColorBrush x:Key="SurfaceBrush" Color="#FF202124" />
+  <SolidColorBrush x:Key="SurfaceLineBrush" Color="#FF3C4043" />
+  <SolidColorBrush x:Key="CardBrush" Color="#FF121212" />
+  <SolidColorBrush x:Key="TextBrush" Color="#FFF1F3F4" />
+  <SolidColorBrush x:Key="SubtleTextBrush" Color="#FFB7BDC6" />
+  <SolidColorBrush x:Key="PlaceholderBrush" Color="#FF929AA4" />
+  <SolidColorBrush x:Key="AccentBrush" Color="#FF8AB4F8" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#FFA7C7FA" />
+  <SolidColorBrush x:Key="ActionBlueBrush" Color="#FF496DA8" />
+  <SolidColorBrush x:Key="OverdueBrush" Color="#FFB3261E" />
+  <SolidColorBrush x:Key="DragHandleBrush" Color="#FF5F6368" />
+  <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FF17212F" />
+  <SolidColorBrush x:Key="LineBrush" Color="#FF3C4043" />
+  <SolidColorBrush x:Key="InputLineBrush" Color="#FF5F6368" />
+  <SolidColorBrush x:Key="CheckboxBrush" Color="#FFB4BBC5" />
+  <SolidColorBrush x:Key="HoverBrush" Color="#FF303134" />
+  <SolidColorBrush x:Key="SelectedBrush" Color="#FF27364A" />
+  <SolidColorBrush x:Key="SelectedLineBrush" Color="#FF8AB4F8" />
+  <SolidColorBrush x:Key="SelectionBrush" Color="#FF526780" />
+  <SolidColorBrush x:Key="DangerBrush" Color="#FFF28B82" />
+  <SolidColorBrush x:Key="InputBrush" Color="#FF303134" />
+</ResourceDictionary>

@@ -1,0 +1,30 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+release/
+artifacts/
+publish/
+**/Data/
+.env
+.env.*
+!.env.example
+
+# Local OAuth credentials and per-user application data.
+**/client_secret_*.json
+**/OAuthClientConfig.g.cs
+**/client-secret.dat
+**/token.dat
+**/cache.dat
+**/settings.json
+**/logs/
+*.log
+
+# Keep distributable binaries and signing keys out of the source repository.
+*.exe
+*.pfx
+*.p12
+*.pem
+*.key
