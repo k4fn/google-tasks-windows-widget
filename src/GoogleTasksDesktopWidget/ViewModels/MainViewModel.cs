@@ -25,6 +25,7 @@ public sealed class MainViewModel : ObservableObject
     private Dictionary<string, List<TaskRecord>> _completedTasksByList = new(StringComparer.Ordinal);
     // Legacy cache data is retained for migration compatibility, but never creates local recurring tasks.
     private Dictionary<string, RecurrenceEntry> _recurrences = new(StringComparer.Ordinal);
+    // After list selection, these references alias the canonical lists stored in the maps.
     private IReadOnlyList<TaskRecord> _currentTasks = Array.Empty<TaskRecord>();
     private IReadOnlyList<TaskRecord> _currentCompletedTasks = Array.Empty<TaskRecord>();
     private TaskListRecord? _selectedList;
@@ -256,12 +257,14 @@ public sealed class MainViewModel : ObservableObject
         {
             await _tasksClient.SetTaskCompletedAsync(listId, item.Id, completed);
             var updated = TaskMutationPolicy.SetCompleted(item.Task, completed, item.Title, DateTimeOffset.UtcNow);
-            _currentTasks = _currentTasks.Where(task => task.Id != item.Id).ToArray();
-            _currentCompletedTasks = _currentCompletedTasks.Where(task => task.Id != item.Id).ToArray();
-            if (completed) _currentCompletedTasks = _currentCompletedTasks.Append(updated).ToArray();
-            else _currentTasks = _currentTasks.Append(updated).ToArray();
-            _tasksByList[listId] = _currentTasks.ToList();
-            _completedTasksByList[listId] = _currentCompletedTasks.ToList();
+            var activeTasks = GetOrCreateTaskList(_tasksByList, listId, _currentTasks);
+            var completedTasks = GetOrCreateTaskList(_completedTasksByList, listId, _currentCompletedTasks);
+            RemoveTasksById(activeTasks, item.Id);
+            RemoveTasksById(completedTasks, item.Id);
+            if (completed) completedTasks.Add(updated);
+            else activeTasks.Add(updated);
+            _currentTasks = activeTasks;
+            _currentCompletedTasks = completedTasks;
             LoadVisibleTasks();
             await SaveCacheBestEffortAsync();
             SetOnlineOrPendingStatus();
@@ -298,10 +301,13 @@ public sealed class MainViewModel : ObservableObject
             await _tasksClient.SetTaskTitleAsync(listId, item.Id, title);
             var taskMap = item.IsCompleted ? _completedTasksByList : _tasksByList;
             var currentTasks = item.IsCompleted ? _currentCompletedTasks : _currentTasks;
-            var listTasks = taskMap.TryGetValue(listId, out var cachedTasks) ? cachedTasks :
-                SelectedList?.Id == listId ? currentTasks.ToList() : new List<TaskRecord>();
-            listTasks = listTasks.Select(task => task.Id == item.Id ? task with { Title = title } : task).ToList();
-            taskMap[listId] = listTasks;
+            var listTasks = GetOrCreateTaskList(taskMap, listId,
+                SelectedList?.Id == listId ? currentTasks : null);
+            for (var index = 0; index < listTasks.Count; index++)
+            {
+                if (listTasks[index].Id == item.Id)
+                    listTasks[index] = listTasks[index] with { Title = title };
+            }
             if (SelectedList?.Id == listId)
             {
                 if (item.IsCompleted) _currentCompletedTasks = listTasks;
@@ -343,8 +349,12 @@ public sealed class MainViewModel : ObservableObject
             await _tasksClient.UpdateTaskDetailsAsync(listId, item.Id, title, notes, dueDate);
             var updated = item.Task with { Title = title, Notes = notes, DueDate = dueDate };
             var map = item.IsCompleted ? _completedTasksByList : _tasksByList;
-            var rows = map.TryGetValue(listId, out var cached) ? cached : [];
-            map[listId] = rows.Select(task => task.Id == item.Id ? updated : task).ToList();
+            var currentTasks = item.IsCompleted ? _currentCompletedTasks : _currentTasks;
+            var rows = GetOrCreateTaskList(map, listId, currentTasks);
+            for (var index = 0; index < rows.Count; index++)
+            {
+                if (rows[index].Id == item.Id) rows[index] = updated;
+            }
             if (item.IsCompleted) _currentCompletedTasks = map[listId];
             else _currentTasks = map[listId];
             LoadVisibleTasks();
@@ -385,19 +395,14 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
         var wasCompleted = item.IsCompleted;
-        var sourceTasks = wasCompleted ? _currentCompletedTasks : _currentTasks;
-        var index = sourceTasks.ToList().FindIndex(task => task.Id == item.Id);
-        var restoreTask = sourceTasks.FirstOrDefault(task => task.Id == item.Id) ?? item.Task;
-        if (wasCompleted)
-        {
-            _currentCompletedTasks = sourceTasks.Where(task => task.Id != item.Id).ToArray();
-            _completedTasksByList[listId] = _currentCompletedTasks.ToList();
-        }
-        else
-        {
-            _currentTasks = sourceTasks.Where(task => task.Id != item.Id).ToArray();
-            _tasksByList[listId] = _currentTasks.ToList();
-        }
+        var taskMap = wasCompleted ? _completedTasksByList : _tasksByList;
+        var currentTasks = wasCompleted ? _currentCompletedTasks : _currentTasks;
+        var sourceTasks = GetOrCreateTaskList(taskMap, listId, currentTasks);
+        if (wasCompleted) _currentCompletedTasks = sourceTasks;
+        else _currentTasks = sourceTasks;
+        var index = FindTaskIndex(sourceTasks, item.Id);
+        var restoreTask = index >= 0 ? sourceTasks[index] : item.Task;
+        RemoveTasksById(sourceTasks, item.Id);
         LoadVisibleTasks();
         try
         {
@@ -408,18 +413,7 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            var restored = (wasCompleted ? _currentCompletedTasks : _currentTasks).ToList();
-            if (index >= 0) restored.Insert(Math.Min(index, restored.Count), restoreTask);
-            if (wasCompleted)
-            {
-                _currentCompletedTasks = restored;
-                _completedTasksByList[listId] = restored.ToList();
-            }
-            else
-            {
-                _currentTasks = restored;
-                _tasksByList[listId] = restored.ToList();
-            }
+            if (index >= 0) sourceTasks.Insert(Math.Min(index, sourceTasks.Count), restoreTask);
             LoadVisibleTasks();
             PresentError(exception);
         }
@@ -560,13 +554,55 @@ public sealed class MainViewModel : ObservableObject
         await Task.WhenAll(activeTasksTask, completedTasksTask);
         var tasks = await activeTasksTask;
         var completedTasks = await completedTasksTask;
-        _currentTasks = tasks;
-        _currentCompletedTasks = completedTasks;
-        _tasksByList[listId] = tasks.ToList();
-        _completedTasksByList[listId] = completedTasks.ToList();
+        var activeTaskList = AsTaskList(tasks);
+        var completedTaskList = AsTaskList(completedTasks);
+        _currentTasks = activeTaskList;
+        _currentCompletedTasks = completedTaskList;
+        _tasksByList[listId] = activeTaskList;
+        _completedTasksByList[listId] = completedTaskList;
         LoadVisibleTasks();
         await SaveCacheBestEffortAsync();
         RaiseContentProperties();
+    }
+
+    private static List<TaskRecord> AsTaskList(IReadOnlyList<TaskRecord> tasks) =>
+        tasks as List<TaskRecord> ?? tasks.ToList();
+
+    private static List<TaskRecord> GetOrCreateTaskList(
+        Dictionary<string, List<TaskRecord>> taskMap,
+        string listId,
+        IReadOnlyList<TaskRecord>? initialTasks)
+    {
+        if (taskMap.TryGetValue(listId, out var tasks)) return tasks;
+        tasks = initialTasks is List<TaskRecord> existingList
+            ? existingList
+            : initialTasks?.ToList() ?? [];
+        taskMap[listId] = tasks;
+        return tasks;
+    }
+
+    private static void RemoveTasksById(List<TaskRecord> tasks, string taskId)
+    {
+        var writeIndex = 0;
+        for (var readIndex = 0; readIndex < tasks.Count; readIndex++)
+        {
+            var task = tasks[readIndex];
+            if (task.Id == taskId) continue;
+            if (writeIndex != readIndex) tasks[writeIndex] = task;
+            writeIndex++;
+        }
+
+        if (writeIndex < tasks.Count) tasks.RemoveRange(writeIndex, tasks.Count - writeIndex);
+    }
+
+    private static int FindTaskIndex(List<TaskRecord> tasks, string taskId)
+    {
+        for (var index = 0; index < tasks.Count; index++)
+        {
+            if (tasks[index].Id == taskId) return index;
+        }
+
+        return -1;
     }
 
     private async Task SelectListAsync(object? parameter)
@@ -624,8 +660,9 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var task = await _tasksClient.CreateTaskAsync(listId, title, notes, dueDate);
-            _currentTasks = _currentTasks.Append(task).ToArray();
-            _tasksByList[listId] = _currentTasks.ToList();
+            var tasks = GetOrCreateTaskList(_tasksByList, listId, _currentTasks);
+            tasks.Add(task);
+            _currentTasks = tasks;
             LoadVisibleTasks();
             await SaveCacheBestEffortAsync();
             SetOnlineOrPendingStatus();
@@ -659,8 +696,9 @@ public sealed class MainViewModel : ObservableObject
                 .OrderBy(task => task.Position, StringComparer.Ordinal)
                 .LastOrDefault();
             var created = await _tasksClient.CreateSubtaskAsync(listId, parent.Id, previousTaskId: previousSibling?.Id);
-            _currentTasks = _currentTasks.Append(created).ToArray();
-            _tasksByList[listId] = _currentTasks.ToList();
+            var tasks = GetOrCreateTaskList(_tasksByList, listId, _currentTasks);
+            tasks.Add(created);
+            _currentTasks = tasks;
             LoadVisibleTasks();
             await SaveCacheBestEffortAsync();
             SetOnlineOrPendingStatus();
@@ -746,11 +784,13 @@ public sealed class MainViewModel : ObservableObject
         await Task.WhenAll(activeTasksTask, completedTasksTask);
         var activeTasks = await activeTasksTask;
         var completedTasks = await completedTasksTask;
-        _tasksByList[listId] = activeTasks.ToList();
-        _completedTasksByList[listId] = completedTasks.ToList();
+        var activeTaskList = AsTaskList(activeTasks);
+        var completedTaskList = AsTaskList(completedTasks);
+        _tasksByList[listId] = activeTaskList;
+        _completedTasksByList[listId] = completedTaskList;
         if (SelectedList?.Id != listId) return;
-        _currentTasks = activeTasks;
-        _currentCompletedTasks = completedTasks;
+        _currentTasks = activeTaskList;
+        _currentCompletedTasks = completedTaskList;
         LoadVisibleTasks();
     }
 
