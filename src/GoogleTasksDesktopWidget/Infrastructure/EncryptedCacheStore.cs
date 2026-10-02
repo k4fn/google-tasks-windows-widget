@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using GoogleTasksDesktopWidget.Core.Models;
@@ -30,8 +32,18 @@ public sealed class EncryptedCacheStore
     public async Task SaveAsync(CachedSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var json = JsonSerializer.SerializeToUtf8Bytes(snapshot);
-        var encrypted = DpapiProtector.Protect(json);
+        var jsonBuffer = new ArrayBufferWriter<byte>();
+        using (var jsonWriter = new Utf8JsonWriter(jsonBuffer))
+        {
+            JsonSerializer.Serialize(jsonWriter, snapshot);
+        }
+
+        if (!MemoryMarshal.TryGetArray(jsonBuffer.WrittenMemory, out var jsonSegment) || jsonSegment.Array is null)
+        {
+            throw new InvalidOperationException("Serialized cache JSON is not backed by an array.");
+        }
+
+        var encrypted = DpapiProtector.Protect(jsonSegment);
         var temporaryPath = _path + ".tmp";
         await File.WriteAllBytesAsync(temporaryPath, encrypted, cancellationToken).ConfigureAwait(false);
         File.Move(temporaryPath, _path, overwrite: true);

@@ -59,6 +59,9 @@ Console.WriteLine("PASS CredentialStore protects, loads, and deletes refresh tok
 await ClientSecretStoreProtectsAndScopesSecretToClientId();
 passedCount++;
 Console.WriteLine("PASS OAuthClientSecretStore protects and scopes the secret to its client ID");
+await EncryptedCacheStoreRoundTripsAndReplacesSnapshots();
+passedCount++;
+Console.WriteLine("PASS EncryptedCacheStore protects, loads, and replaces snapshots");
 SettingsStorePersistsOAuthClientId();
 passedCount++;
 Console.WriteLine("PASS SettingsStore persists the user-configured OAuth client ID");
@@ -367,6 +370,43 @@ static async Task ClientSecretStoreProtectsAndScopesSecretToClientId()
         store.Delete();
         False(store.HasClientSecret);
         Equal<string?>(null, store.ReadClientSecret(clientId));
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+static async Task EncryptedCacheStoreRoundTripsAndReplacesSnapshots()
+{
+    var directory = CreateTestDirectory();
+    try
+    {
+        var path = Path.Combine(directory, "cache.dat");
+        var store = new EncryptedCacheStore(path);
+        var updated = new DateTimeOffset(2026, 10, 2, 12, 30, 0, TimeSpan.Zero);
+        var task = new TaskRecord("task-id", "Task 🔐", "needsAction", new DateOnly(2026, 10, 3), null,
+            "position", "list-id", new string('n', 20_000), updated, null, "https://tasks.google.com/task-id");
+        var completedTask = task with { Status = "completed", Completed = updated.AddMinutes(1) };
+        var snapshot = new CachedSnapshot(updated, [new TaskListRecord("list-id", "Tasks")],
+            new Dictionary<string, List<TaskRecord>>(StringComparer.Ordinal) { ["list-id"] = [task] },
+            "client-id",
+            new Dictionary<string, List<TaskRecord>>(StringComparer.Ordinal) { ["list-id"] = [completedTask] },
+            "credential-fingerprint");
+
+        await store.SaveAsync(snapshot);
+        var replacement = snapshot with { SavedAt = updated.AddMinutes(2) };
+        await store.SaveAsync(replacement);
+
+        False(File.Exists(path + ".tmp"));
+        var loaded = await store.LoadAsync();
+        True(loaded is not null);
+        Equal(replacement.SavedAt, loaded!.SavedAt);
+        Equal("client-id", loaded.OAuthClientId);
+        Equal("credential-fingerprint", loaded.OAuthCredentialFingerprint);
+        Equal(task, loaded.TasksByList["list-id"][0]);
+        Equal(completedTask, loaded.CompletedTasksByList!["list-id"][0]);
+        Equal(task.Notes, loaded.TasksByList["list-id"][0].Notes);
     }
     finally
     {

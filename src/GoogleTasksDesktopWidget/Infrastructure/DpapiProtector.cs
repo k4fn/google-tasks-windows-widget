@@ -39,14 +39,34 @@ internal static class DpapiProtector
     [DllImport("kernel32.dll")]
     private static extern IntPtr LocalFree(IntPtr memory);
 
-    public static byte[] Protect(byte[] plaintext) => Transform(plaintext, protect: true);
-    public static byte[] Unprotect(byte[] ciphertext) => Transform(ciphertext, protect: false);
+    public static byte[] Protect(byte[] plaintext)
+    {
+        ArgumentNullException.ThrowIfNull(plaintext);
+        return Transform(plaintext, 0, plaintext.Length, protect: true);
+    }
 
-    private static byte[] Transform(byte[] input, bool protect)
+    public static byte[] Protect(ArraySegment<byte> plaintext)
+    {
+        var array = plaintext.Array;
+        ArgumentNullException.ThrowIfNull(array);
+        return Transform(array, plaintext.Offset, plaintext.Count, protect: true);
+    }
+
+    public static byte[] Unprotect(byte[] ciphertext)
+    {
+        ArgumentNullException.ThrowIfNull(ciphertext);
+        return Transform(ciphertext, 0, ciphertext.Length, protect: false);
+    }
+
+    private static byte[] Transform(byte[] input, int offset, int length, bool protect)
     {
         ArgumentNullException.ThrowIfNull(input);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (offset > input.Length - length) throw new ArgumentOutOfRangeException(nameof(length));
+
         var handle = GCHandle.Alloc(input, GCHandleType.Pinned);
-        var source = new DataBlob { Length = input.Length, Data = handle.AddrOfPinnedObject() };
+        var source = new DataBlob { Length = length, Data = IntPtr.Add(handle.AddrOfPinnedObject(), offset) };
         DataBlob result = default;
         try
         {
