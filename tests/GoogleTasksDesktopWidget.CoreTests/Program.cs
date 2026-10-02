@@ -76,6 +76,7 @@ passedCount++;
 Console.WriteLine("PASS Client ID cleanup failure keeps the new ID and blocks the old token");
 
 Console.WriteLine($"Passed {passedCount} core tests.");
+TaskRowMemoryTests.Run();
 
 static void DueDateUsesDateSegment()
 {
