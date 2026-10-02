@@ -78,7 +78,9 @@ public sealed class MainViewModel : ObservableObject
         SaveClientIdCommand = new AsyncRelayCommand(_ => SaveClientIdAsync(), _ => !IsBusy && CanSaveClientId);
         CancelClientIdSetupCommand = new RelayCommand(_ => CancelClientIdSetup());
 
-        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+        if (settings.RefreshIntervalSeconds is < AppSettings.MinRefreshIntervalSeconds or > AppSettings.MaxRefreshIntervalSeconds)
+            settings.RefreshIntervalSeconds = AppSettings.DefaultRefreshIntervalSeconds;
+        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(settings.RefreshIntervalSeconds) };
         _pollTimer.Tick += async (_, _) => await PollAsync();
     }
 
@@ -173,6 +175,25 @@ public sealed class MainViewModel : ObservableObject
     public bool IsAllFilter => _settings.Filter == TaskFilter.All;
     public bool IsTodayFilter => _settings.Filter == TaskFilter.Today;
     public TaskSortOrder SortOrder => _settings.SortOrder;
+    public int RefreshIntervalSeconds => _settings.RefreshIntervalSeconds;
+
+    public bool SetRefreshIntervalSeconds(int seconds)
+    {
+        if (seconds is < AppSettings.MinRefreshIntervalSeconds or > AppSettings.MaxRefreshIntervalSeconds) return false;
+        if (seconds == RefreshIntervalSeconds) return true;
+        var previous = RefreshIntervalSeconds;
+        _settings.RefreshIntervalSeconds = seconds;
+        try { _settingsStore.Save(_settings); }
+        catch (Exception exception)
+        {
+            _settings.RefreshIntervalSeconds = previous;
+            PresentError(exception);
+            return false;
+        }
+        _pollTimer.Interval = TimeSpan.FromSeconds(seconds);
+        OnPropertyChanged(nameof(RefreshIntervalSeconds));
+        return true;
+    }
     public bool HasTasks => Tasks.Count > 0;
     public int CompletedTaskCount => _currentCompletedTasks.Count;
     public bool IsCompletedSectionExpanded => _settings.IsCompletedSectionExpanded;

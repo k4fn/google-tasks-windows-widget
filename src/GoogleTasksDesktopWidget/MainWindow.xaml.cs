@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private double _resizeStartWidth;
     private double _resizeStartHeight;
     private TaskItemViewModel? _expandedTask;
+    private TaskItemViewModel? _outsideClickTask;
     private FrameworkElement? _expandedTaskRow;
     private TaskItemViewModel? _draftTask;
     private MenuItem? _createTaskListMenuItem;
@@ -44,6 +45,8 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         _desktopHost = desktopHost;
         DataContext = viewModel;
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(OnWidgetPreviewMouseLeftButtonDown), handledEventsToo: true);
+        AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(OnWidgetSurfacePreviewMouseLeftButtonUp), handledEventsToo: true);
         CompletedTasksItemsControl.ItemsSource = _visibleCompletedTasks;
         Width = Math.Clamp(_desktopHost.RestoreWidthDip, MinWidth, MaxWidth);
         Height = Math.Clamp(_desktopHost.RestoreHeightDip, MinHeight, MaxHeight);
@@ -129,6 +132,56 @@ public partial class MainWindow : Window
     private void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         _viewModel.RefreshCommand.Execute(null);
+    }
+
+    private void OnRefreshIntervalMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, e.OriginalSource)) return;
+        RefreshIntervalBox.Text = _viewModel.RefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+        RefreshIntervalError.Visibility = Visibility.Collapsed;
+        foreach (var item in RefreshIntervalMenu.Items.OfType<MenuItem>())
+        {
+            if (item.Tag is string value && int.TryParse(value, out var seconds))
+                item.IsChecked = seconds == _viewModel.RefreshIntervalSeconds;
+        }
+    }
+
+    private void OnRefreshIntervalPresetClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string value } && int.TryParse(value, out var seconds))
+            _viewModel.SetRefreshIntervalSeconds(seconds);
+    }
+
+    private void OnApplyRefreshIntervalClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        ApplyRefreshInterval();
+    }
+
+    private void OnRefreshIntervalKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        ApplyRefreshInterval();
+    }
+
+    private void ApplyRefreshInterval()
+    {
+        if (!int.TryParse(RefreshIntervalBox.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) ||
+            seconds is < AppSettings.MinRefreshIntervalSeconds or > AppSettings.MaxRefreshIntervalSeconds)
+        {
+            RefreshIntervalError.Text = "10～86400の整数を入力してください。";
+            RefreshIntervalError.Visibility = Visibility.Visible;
+            RefreshIntervalBox.Focus();
+            return;
+        }
+        if (!_viewModel.SetRefreshIntervalSeconds(seconds))
+        {
+            RefreshIntervalError.Text = "設定を保存できませんでした。";
+            RefreshIntervalError.Visibility = Visibility.Visible;
+            return;
+        }
+        RefreshIntervalMenu.IsSubmenuOpen = false;
     }
 
     private void OnImportClientIdClick(object sender, RoutedEventArgs e)
@@ -477,15 +530,27 @@ public partial class MainWindow : Window
         DraftTaskPresenter.BringIntoView();
     }
 
+    private void OnWidgetPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _outsideClickTask = null;
+        if (_expandedTask is not { IsDetailsExpanded: true } task ||
+            _expandedTaskRow is not { } row ||
+            e.OriginalSource is DependencyObject source && IsWithin(source, row) &&
+            (FindAncestor<TextBox>(source) is not null || FindAncestor<Button>(source) is not null ||
+             FindAncestor<System.Windows.Controls.Calendar>(source) is not null || FindAncestor<ComboBox>(source) is not null)) return;
+        _outsideClickTask = task;
+    }
+
     private void OnWidgetSurfacePreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_draftTask is not { } draft || !IsBlankDraft(draft) ||
-            e.OriginalSource is DependencyObject source && IsWithin(source, DraftTaskPresenter)) return;
+        var task = _outsideClickTask;
+        _outsideClickTask = null;
+        if (task is null) return;
 
         // Mouse-up produces Button.Click; update the tree after that routed event completes.
-        Dispatcher.BeginInvoke(() =>
+        Dispatcher.BeginInvoke(async () =>
         {
-            if (ReferenceEquals(_draftTask, draft) && IsBlankDraft(draft)) DiscardDraftTask();
+            if (ReferenceEquals(_expandedTask, task)) await SaveExpandedTaskAsync();
         }, DispatcherPriority.Background);
     }
 
@@ -632,7 +697,9 @@ public partial class MainWindow : Window
             DiscardDraftTask();
             return true;
         }
-        if (!await _viewModel.SaveTaskDetailsAsync(task, title, task.DraftNotes, due)) return false;
+        var unchanged = title == task.Task.Title &&
+                        task.DraftNotes == (task.Task.Notes ?? string.Empty) && due == task.Task.DueDate;
+        if (!unchanged && !await _viewModel.SaveTaskDetailsAsync(task, title, task.DraftNotes, due)) return false;
         task.IsDetailsExpanded = false;
         if (ReferenceEquals(_expandedTask, task)) ClearInlineTaskEditorReference();
         return true;
@@ -668,9 +735,11 @@ public partial class MainWindow : Window
 
     private void OnTaskContextMenuClosed(object sender, RoutedEventArgs e)
     {
-        if (sender is not ContextMenu menu || _createTaskListMenuItem is not { } item ||
-            !ReferenceEquals(FindAncestor<ContextMenu>(item), menu)) return;
-        RestoreCreateTaskListMenuItem(item);
+        if (sender is not ContextMenu menu) return;
+        if (_createTaskListMenuItem is { } item && ReferenceEquals(FindAncestor<ContextMenu>(item), menu))
+            RestoreCreateTaskListMenuItem(item);
+        // The shared task menu must not retain a removed row after it closes.
+        if (ReferenceEquals(menu, Resources["TaskContextMenu"])) menu.PlacementTarget = null;
     }
 
     private void OnCreateTaskListClick(object sender, RoutedEventArgs e)

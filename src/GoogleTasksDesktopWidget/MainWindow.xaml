@@ -218,18 +218,49 @@
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <ContextMenu x:Key="ListSelectorMenu" x:Shared="False" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" Foreground="{DynamicResource TextBrush}" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Opened="OnListSelectorMenuOpened" Closed="OnTaskContextMenuClosed"/>
+    <!-- PlacementTarget supplies the current row to this shared menu. -->
+    <ContextMenu x:Key="TaskContextMenu" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" Foreground="{DynamicResource TextBrush}" Opened="OnTaskContextMenuOpened" Closed="OnTaskContextMenuClosed">
+      <MenuItem Header="期限を追加" Click="OnTaskDueMenuClick"/>
+      <MenuItem Header="サブタスクを追加" Click="OnAddSubtaskClick"/>
+      <MenuItem Header="{DynamicResource Delete}" Click="OnDeleteTaskClick"/>
+      <Separator/>
+      <MenuItem x:Name="TaskMoveListMenu" Header="マイタスク" SubmenuOpened="OnTaskMoveListMenuOpened"/>
+      <MenuItem Header="新しいリスト" Click="OnCreateTaskListClick" StaysOpenOnClick="True"/>
+    </ContextMenu>
+    <!-- Closed rows retain only presenters; create editors and calendars on demand. -->
+    <DataTemplate x:Key="TaskTitleEditor">
+        <TextBox x:Name="InlineTaskTitle" Text="{Binding EditDraft, UpdateSourceTrigger=PropertyChanged}" FontSize="15" MaxLength="1024" TextWrapping="Wrap" VerticalContentAlignment="Center" MinHeight="28" Style="{StaticResource InlineEditorTextBox}" PreviewKeyDown="OnInlineTaskTitleKeyDown"/>
+    </DataTemplate>
+    <DataTemplate x:Key="TaskDetailsEditor">
+      <StackPanel Margin="0,2,0,0">
+        <Grid MinHeight="26" Margin="1,0,0,7">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Path Data="M 1,2 L 15,2 M 1,6 L 15,6 M 1,10 L 11,10" Stroke="{DynamicResource SubtleTextBrush}" StrokeThickness="1.25" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="15" Height="12" Stretch="None" VerticalAlignment="Center"/>
+          <Grid Grid.Column="1">
+            <TextBox x:Name="InlineTaskNotes" Text="{Binding DraftNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="24" MaxLength="8192" Style="{StaticResource InlineEditorTextBox}" ToolTip="詳細" VerticalContentAlignment="Center" PreviewKeyDown="OnInlineTaskNotesKeyDown"/>
+            <TextBlock Text="詳細" Margin="0,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource PlaceholderBrush}" IsHitTestVisible="False" Visibility="{Binding DraftNotes, Converter={StaticResource EmptyStringToVisibilityConverter}}"/>
+          </Grid>
+        </Grid>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,1">
+          <Button Content="今日" Tag="Today" Click="OnQuickDueClick" Style="{StaticResource QuickDateButton}" Margin="0,0,5,0"/>
+          <Button Content="明日" Tag="Tomorrow" Click="OnQuickDueClick" Style="{StaticResource QuickDateButton}" Margin="0,0,5,0"/>
+          <Button x:Name="InlineTaskCalendarButton" Click="OnOpenTaskCalendarClick" Style="{StaticResource QuickDateButton}" Padding="8,3" ToolTip="日付を選択" AutomationProperties.Name="日付を選択">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="M 3,1 L 3,4 M 11,1 L 11,4 M 1,4 L 13,4 L 13,13 L 1,13 Z M 1,7 L 13,7" Width="13" Height="13" Stretch="Fill" Stroke="{DynamicResource SubtleTextBrush}" StrokeThickness="1.1"/>
+              <TextBlock Text="{Binding DraftDueDate, StringFormat={}{0:M月d日}}" Margin="4,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Content="×" Tag="Clear" Click="OnQuickDueClick" Style="{StaticResource QuickDateClearButton}" Width="26" Padding="0" Margin="4,0,0,0" ToolTip="日付を解除" AutomationProperties.Name="日付を解除"/>
+        </StackPanel>
+        <Popup x:Name="InlineTaskCalendarPopup" PlacementTarget="{Binding ElementName=InlineTaskCalendarButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+          <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="10" Padding="5">
+            <Calendar x:Name="InlineTaskCalendar" SelectedDatesChanged="OnInlineTaskCalendarSelectionChanged"/>
+          </Border>
+        </Popup>
+      </StackPanel>
+    </DataTemplate>
     <DataTemplate x:Key="TaskRow">
-      <Border Background="Transparent" Padding="{Binding Depth, Converter={StaticResource TaskDepthPaddingConverter}}" MouseEnter="OnTaskRowMouseEnter" MouseLeave="OnTaskRowMouseLeave" MouseLeftButtonDown="OnTaskRowMouseLeftButtonDown" ContextMenuService.IsEnabled="{Binding IsPersisted}" Cursor="Hand">
-        <Border.ContextMenu>
-          <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" Foreground="{DynamicResource TextBrush}" Opened="OnTaskContextMenuOpened" Closed="OnTaskContextMenuClosed">
-            <MenuItem Header="期限を追加" Click="OnTaskDueMenuClick"/>
-            <MenuItem Header="サブタスクを追加" Click="OnAddSubtaskClick"/>
-            <MenuItem Header="{DynamicResource Delete}" Click="OnDeleteTaskClick"/>
-            <Separator/>
-            <MenuItem x:Name="TaskMoveListMenu" Header="マイタスク" SubmenuOpened="OnTaskMoveListMenuOpened"/>
-            <MenuItem Header="新しいリスト" Click="OnCreateTaskListClick" StaysOpenOnClick="True"/>
-          </ContextMenu>
-        </Border.ContextMenu>
+      <Border Background="Transparent" Padding="{Binding Depth, Converter={StaticResource TaskDepthPaddingConverter}}" MouseEnter="OnTaskRowMouseEnter" MouseLeave="OnTaskRowMouseLeave" MouseLeftButtonDown="OnTaskRowMouseLeftButtonDown" ContextMenu="{StaticResource TaskContextMenu}" ContextMenuService.IsEnabled="{Binding IsPersisted}" Cursor="Hand">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="26"/>
@@ -249,48 +280,36 @@
                   </Style>
                 </TextBlock.Style>
               </TextBlock>
-              <TextBox x:Name="InlineTaskTitle" Text="{Binding EditDraft, UpdateSourceTrigger=PropertyChanged}" FontSize="15" MaxLength="1024" TextWrapping="Wrap" VerticalContentAlignment="Center" MinHeight="28" PreviewKeyDown="OnInlineTaskTitleKeyDown">
-                <TextBox.Style>
-                  <Style TargetType="TextBox" BasedOn="{StaticResource InlineEditorTextBox}">
-                    <Setter Property="Visibility" Value="Collapsed"/>
+              <ContentControl Focusable="False">
+                <ContentControl.Style>
+                  <Style TargetType="ContentControl">
                     <Style.Triggers>
-                      <DataTrigger Binding="{Binding IsDetailsExpanded}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                      <DataTrigger Binding="{Binding IsDetailsExpanded}" Value="True">
+                        <Setter Property="Content" Value="{Binding}"/>
+                        <Setter Property="ContentTemplate" Value="{StaticResource TaskTitleEditor}"/>
+                      </DataTrigger>
                     </Style.Triggers>
                   </Style>
-                </TextBox.Style>
-              </TextBox>
+                </ContentControl.Style>
+              </ContentControl>
             </Grid>
             <StackPanel Style="{StaticResource TaskDueInfo}">
               <Path Data="M 12,2 A 10,10 0 1 1 11.99,2 M 12,6 L 12,12 L 16,15" Width="13" Height="13" Stretch="Uniform" Stroke="{Binding Tag, RelativeSource={RelativeSource AncestorType=StackPanel}}" StrokeThickness="1.6"/>
               <TextBlock Text="{Binding DueDateText}" Margin="6,-2,0,0" FontSize="12" Foreground="{Binding Tag, RelativeSource={RelativeSource AncestorType=StackPanel}}"/>
             </StackPanel>
             <TextBlock Text="{Binding CompletedDateText}" Margin="1,3,0,0" FontSize="12" Foreground="{DynamicResource SubtleTextBrush}" Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibilityConverter}}"/>
-            <StackPanel Visibility="{Binding IsDetailsExpanded, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,2,0,0">
-              <Grid MinHeight="26" Margin="1,0,0,7">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Path Data="M 1,2 L 15,2 M 1,6 L 15,6 M 1,10 L 11,10" Stroke="{DynamicResource SubtleTextBrush}" StrokeThickness="1.25" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="15" Height="12" Stretch="None" VerticalAlignment="Center"/>
-                <Grid Grid.Column="1">
-                  <TextBox x:Name="InlineTaskNotes" Text="{Binding DraftNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="24" MaxLength="8192" Style="{StaticResource InlineEditorTextBox}" ToolTip="詳細" VerticalContentAlignment="Center" PreviewKeyDown="OnInlineTaskNotesKeyDown"/>
-                  <TextBlock Text="詳細" Margin="0,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource PlaceholderBrush}" IsHitTestVisible="False" Visibility="{Binding DraftNotes, Converter={StaticResource EmptyStringToVisibilityConverter}}"/>
-                </Grid>
-              </Grid>
-              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,1">
-                <Button Content="今日" Tag="Today" Click="OnQuickDueClick" Style="{StaticResource QuickDateButton}" Margin="0,0,5,0"/>
-                <Button Content="明日" Tag="Tomorrow" Click="OnQuickDueClick" Style="{StaticResource QuickDateButton}" Margin="0,0,5,0"/>
-                <Button x:Name="InlineTaskCalendarButton" Click="OnOpenTaskCalendarClick" Style="{StaticResource QuickDateButton}" Padding="8,3" ToolTip="日付を選択" AutomationProperties.Name="日付を選択">
-                  <StackPanel Orientation="Horizontal">
-                    <Path Data="M 3,1 L 3,4 M 11,1 L 11,4 M 1,4 L 13,4 L 13,13 L 1,13 Z M 1,7 L 13,7" Width="13" Height="13" Stretch="Fill" Stroke="{DynamicResource SubtleTextBrush}" StrokeThickness="1.1"/>
-                    <TextBlock Text="{Binding DraftDueDate, StringFormat={}{0:M月d日}}" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                  </StackPanel>
-                </Button>
-                <Button Content="×" Tag="Clear" Click="OnQuickDueClick" Style="{StaticResource QuickDateClearButton}" Width="26" Padding="0" Margin="4,0,0,0" ToolTip="日付を解除" AutomationProperties.Name="日付を解除"/>
-              </StackPanel>
-              <Popup x:Name="InlineTaskCalendarPopup" PlacementTarget="{Binding ElementName=InlineTaskCalendarButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-                <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="10" Padding="5">
-                  <Calendar x:Name="InlineTaskCalendar" SelectedDatesChanged="OnInlineTaskCalendarSelectionChanged"/>
-                </Border>
-              </Popup>
-            </StackPanel>
+            <ContentControl Focusable="False">
+              <ContentControl.Style>
+                <Style TargetType="ContentControl">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDetailsExpanded}" Value="True">
+                      <Setter Property="Content" Value="{Binding}"/>
+                      <Setter Property="ContentTemplate" Value="{StaticResource TaskDetailsEditor}"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ContentControl.Style>
+            </ContentControl>
           </StackPanel>
           <Button Grid.Column="2" Style="{StaticResource TaskMenuButton}" Visibility="{Binding IsPersisted, Converter={StaticResource BoolToVisibilityConverter}}" Click="OnTaskOptionsClick" ToolTip="タスクのオプション" AutomationProperties.Name="タスクのオプション" VerticalAlignment="Top" Margin="0,-1,0,0">
             <TextBlock Text="⋮" FontSize="19" Foreground="{DynamicResource SubtleTextBrush}" VerticalAlignment="Center"/>
@@ -299,7 +318,7 @@
       </Border>
     </DataTemplate>
   </Window.Resources>
-  <Border x:Name="WidgetSurface" Background="{DynamicResource SurfaceBrush}" CornerRadius="19" Padding="15,4,13,8" PreviewMouseLeftButtonUp="OnWidgetSurfacePreviewMouseLeftButtonUp">
+  <Border x:Name="WidgetSurface" Background="{DynamicResource SurfaceBrush}" CornerRadius="19" Padding="15,4,13,8">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="10"/>
@@ -331,7 +350,7 @@
           </Button>
         </StackPanel>
       </Grid>
-      <ScrollViewer x:Name="TaskScrollViewer" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="OnTaskScrollChanged">
+      <ScrollViewer x:Name="TaskScrollViewer" Grid.Row="2" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="OnTaskScrollChanged">
         <ScrollViewer.Resources>
           <Style TargetType="ScrollBar" BasedOn="{StaticResource MinimalTaskScrollBar}"/>
         </ScrollViewer.Resources>
@@ -384,6 +403,26 @@
         <MenuItem Header="タイトル" Tag="Title" IsCheckable="True" Click="OnSortOrderClick"/>
       </MenuItem>
       <MenuItem Header="{DynamicResource MenuRefresh}" Command="{Binding RefreshCommand}"/>
+      <MenuItem x:Name="RefreshIntervalMenu" Header="自動更新間隔" SubmenuOpened="OnRefreshIntervalMenuOpened">
+        <MenuItem Header="30秒" Tag="30" IsCheckable="True" Click="OnRefreshIntervalPresetClick"/>
+        <MenuItem Header="1分" Tag="60" IsCheckable="True" Click="OnRefreshIntervalPresetClick"/>
+        <MenuItem Header="5分" Tag="300" IsCheckable="True" Click="OnRefreshIntervalPresetClick"/>
+        <MenuItem Header="15分" Tag="900" IsCheckable="True" Click="OnRefreshIntervalPresetClick"/>
+        <MenuItem Header="1時間" Tag="3600" IsCheckable="True" Click="OnRefreshIntervalPresetClick"/>
+        <Separator/>
+        <MenuItem StaysOpenOnClick="True">
+          <MenuItem.Header>
+            <StackPanel Width="210">
+              <TextBlock Text="秒数を指定（10～86400秒）" Margin="0,0,0,6"/>
+              <StackPanel Orientation="Horizontal">
+                <TextBox x:Name="RefreshIntervalBox" Width="112" MaxLength="5" Style="{StaticResource WidgetTextBox}" PreviewKeyDown="OnRefreshIntervalKeyDown" AutomationProperties.Name="自動更新間隔（秒）"/>
+                <Button Content="適用" Margin="8,0,0,0" Padding="8,4" Style="{StaticResource PrimaryButton}" Click="OnApplyRefreshIntervalClick"/>
+              </StackPanel>
+              <TextBlock x:Name="RefreshIntervalError" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="{DynamicResource SubtleTextBrush}" Visibility="Collapsed"/>
+            </StackPanel>
+          </MenuItem.Header>
+        </MenuItem>
+      </MenuItem>
       <MenuItem Header="{DynamicResource OAuthClientSetupMenu}" Command="{Binding ConfigureClientIdCommand}"/>
       <Separator/>
       <MenuItem Header="{DynamicResource MenuLock}" IsCheckable="True" x:Name="LockMenuItem" Click="OnLockMenuClick"/>

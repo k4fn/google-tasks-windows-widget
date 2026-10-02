@@ -75,6 +75,8 @@ public sealed class SettingsStore
             settings.WidthDip = Math.Clamp(settings.WidthDip, 300, 700);
             settings.HeightDip = Math.Clamp(settings.HeightDip, 300, 850);
             settings.MaxHeightDip = Math.Clamp(settings.MaxHeightDip, 300, 520);
+            if (settings.RefreshIntervalSeconds is < AppSettings.MinRefreshIntervalSeconds or > AppSettings.MaxRefreshIntervalSeconds)
+                settings.RefreshIntervalSeconds = AppSettings.DefaultRefreshIntervalSeconds;
             if (settings.SchemaVersion == 1)
             {
                 if (settings.Theme == WidgetTheme.System) settings.Theme = WidgetTheme.Dark;

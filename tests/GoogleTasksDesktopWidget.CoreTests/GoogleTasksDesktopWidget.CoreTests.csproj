@@ -6,6 +6,7 @@
     <SelfContained>true</SelfContained>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\GoogleTasksDesktopWidget.Core\GoogleTasksDesktopWidget.Core.csproj" />
