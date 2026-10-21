@@ -64,6 +64,8 @@ internal static class TaskRowMemoryTests
         var popup = Descendants(row).OfType<System.Windows.Controls.Primitives.Popup>().Single();
         if (!ReferenceEquals(popup.PlacementTarget, button) || popup.Child is null)
             throw new Exception("Calendar popup lost its placement target or content.");
+        if (!popup.StaysOpen)
+            throw new Exception("Calendar popup closes during month navigation.");
         task.IsDetailsExpanded = false;
         Layout(row);
         if (Descendants(row).OfType<TextBox>().Any())

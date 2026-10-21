@@ -72,6 +72,10 @@ public partial class MainWindow : Window
 
     private async void OnWindowDeactivated(object? sender, EventArgs e)
     {
+        // The calendar uses a separate HWND. Window deactivation is not a reliable
+        // outside-click signal while it is open (the month arrows can trigger it).
+        if (_expandedTaskRow is { } row &&
+            FindDescendant<Popup>(row, "InlineTaskCalendarPopup") is { IsOpen: true }) return;
         await SaveExpandedTaskAsync();
     }
 
@@ -533,6 +537,13 @@ public partial class MainWindow : Window
     private void OnWidgetPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _outsideClickTask = null;
+        if (_expandedTaskRow is { } calendarRow &&
+            FindDescendant<Popup>(calendarRow, "InlineTaskCalendarPopup") is { IsOpen: true } calendarPopup)
+        {
+            if (e.OriginalSource is DependencyObject clicked &&
+                calendarPopup.Child is { } calendarContent && IsWithin(clicked, calendarContent)) return;
+            calendarPopup.IsOpen = false;
+        }
         if (_expandedTask is not { IsDetailsExpanded: true } task ||
             _expandedTaskRow is not { } row ||
             e.OriginalSource is DependencyObject source && IsWithin(source, row) &&

@@ -252,7 +252,7 @@
           </Button>
           <Button Content="×" Tag="Clear" Click="OnQuickDueClick" Style="{StaticResource QuickDateClearButton}" Width="26" Padding="0" Margin="4,0,0,0" ToolTip="日付を解除" AutomationProperties.Name="日付を解除"/>
         </StackPanel>
-        <Popup x:Name="InlineTaskCalendarPopup" PlacementTarget="{Binding ElementName=InlineTaskCalendarButton}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+        <Popup x:Name="InlineTaskCalendarPopup" PlacementTarget="{Binding ElementName=InlineTaskCalendarButton}" Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
           <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" CornerRadius="10" Padding="5">
             <Calendar x:Name="InlineTaskCalendar" SelectedDatesChanged="OnInlineTaskCalendarSelectionChanged"/>
           </Border>
